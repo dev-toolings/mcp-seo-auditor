@@ -1,0 +1,143 @@
+name: Security Audit (Daily)
+
+on:
+  schedule:
+    # Tous les jours à 03h00 UTC+2 (Paris) = 01h00 UTC
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+  push:
+    branches: [develop, main, staging]
+    paths:
+      - 'bun.lock'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'yarn.lock'
+      - 'pnpm-lock.yaml'
+      - 'composer.lock'
+      - 'requirements*.txt'
+      - 'poetry.lock'
+      - '**/pyproject.toml'
+
+permissions:
+  contents: read
+
+jobs:
+  npm-audit:
+    name: NPM Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check for package.json
+        id: check
+        run: test -f package.json && echo "exists=true" >> "$GITHUB_OUTPUT" || echo "exists=false" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Bun
+        if: steps.check.outputs.exists == 'true'
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        if: steps.check.outputs.exists == 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Run bun audit
+        if: steps.check.outputs.exists == 'true'
+        id: npm_audit
+        run: |
+          OUTPUT=$(bun audit 2>&1) || true
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q "0 vulnerabilities"; then
+            echo "status=clean" >> "$GITHUB_OUTPUT"
+            echo "summary=0 vulnérabilité npm" >> "$GITHUB_OUTPUT"
+          elif echo "$OUTPUT" | grep -qE "[0-9]+ vulnerabilit"; then
+            VULN_LINE=$(echo "$OUTPUT" | grep -oE "[0-9]+ vulnerabilit[^ ]*" | head -1)
+            echo "status=vulnerable" >> "$GITHUB_OUTPUT"
+            echo "summary=${VULN_LINE} npm" >> "$GITHUB_OUTPUT"
+            echo "details<<EOF" >> "$GITHUB_OUTPUT"
+            echo "$OUTPUT" | head -30 >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=clean" >> "$GITHUB_OUTPUT"
+            echo "summary=Audit npm OK" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Discord notification (vulnerabilities found)
+        if: steps.check.outputs.exists == 'true' && steps.npm_audit.outputs.status == 'vulnerable'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_SECURITY_AUDIT_WEBHOOK }}
+        run: |
+          [ -z "$DISCORD_WEBHOOK" ] && echo "DISCORD_SECURITY_AUDIT_WEBHOOK not set, skipping" && exit 0
+          PAYLOAD=$(jq -n \
+            --arg title "🟡 NPM Audit — Vulnérabilités détectées" \
+            --arg desc "${{ steps.npm_audit.outputs.summary }}" \
+            --arg details "${{ steps.npm_audit.outputs.details }}" \
+            --arg repo "${{ github.repository }}" \
+            --arg url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            '{embeds: [{title: $title, description: ("**" + $desc + "**\n\n```\n" + $details + "\n```\n\n[Voir le run](" + $url + ")"), color: 16776960, footer: {text: $repo}}]}')
+          curl -fsS -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"
+
+      - name: Discord notification (all clean)
+        if: steps.check.outputs.exists == 'true' && steps.npm_audit.outputs.status == 'clean' && github.event_name == 'schedule'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_SECURITY_AUDIT_WEBHOOK }}
+        run: |
+          [ -z "$DISCORD_WEBHOOK" ] && echo "DISCORD_SECURITY_AUDIT_WEBHOOK not set, skipping" && exit 0
+          PAYLOAD=$(jq -n \
+            --arg repo "${{ github.repository }}" \
+            --arg url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            '{embeds: [{title: "🟢 NPM Audit — Aucune vulnérabilité", description: ("[Voir le run](" + $url + ")"), color: 5763719, footer: {text: $repo}}]}')
+          curl -fsS -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"
+
+  pip-audit:
+    name: Pip Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/mcp-server
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: pip install pip-audit
+      - name: Audit Python dependencies
+        run: pip-audit . --desc
+
+  obfuscation-scan:
+    name: JS Obfuscation Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Scan for obfuscated JS in config files
+        id: scan
+        run: |
+          FOUND=0
+          for f in $(find . -maxdepth 2 -name "*.config.js" -o -name "*.config.mjs" -o -name "*.config.cjs" -o -name ".eslintrc.js" -o -name ".prettierrc.js" | grep -v node_modules); do
+            MAX_LINE=$(awk '{ if (length > max) max = length } END { print max }' "$f")
+            if [ "${MAX_LINE:-0}" -gt 500 ]; then
+              echo "::error file=$f::Line longer than 500 chars — possible obfuscated payload"
+              FOUND=1
+            fi
+            if grep -qP 'global\[|Function\(\|_\$_[0-9a-f]' "$f" 2>/dev/null; then
+              echo "::error file=$f::Suspicious obfuscation pattern detected"
+              FOUND=1
+            fi
+          done
+          echo "found=$FOUND" >> "$GITHUB_OUTPUT"
+
+      - name: Discord alert (obfuscation detected)
+        if: steps.scan.outputs.found == '1'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_SECURITY_AUDIT_WEBHOOK }}
+        run: |
+          [ -z "$DISCORD_WEBHOOK" ] && echo "DISCORD_SECURITY_AUDIT_WEBHOOK not set, skipping" && exit 0
+          PAYLOAD=$(jq -n \
+            --arg repo "${{ github.repository }}" \
+            --arg url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            '{embeds: [{title: "🚨 ALERTE — Code obfusqué détecté dans un fichier config JS", description: ("Possible injection supply-chain. Vérifier immédiatement.\n\n[Voir le run](" + $url + ")"), color: 15548997, footer: {text: $repo}}]}')
+          curl -fsS -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK"
+
+      - name: Fail if obfuscation found
+        if: steps.scan.outputs.found == '1'
+        run: exit 1

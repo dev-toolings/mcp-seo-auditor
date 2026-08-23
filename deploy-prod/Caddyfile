@@ -1,0 +1,16 @@
+{$DOMAIN:localhost} {
+    # MCP protocol → MCP server (streamable-http transport)
+    handle /mcp/* {
+        reverse_proxy mcp-server:8020
+    }
+
+    # Health probe
+    handle /health {
+        reverse_proxy mcp-server:8020
+    }
+
+    # No frontend is served: this deployment exposes the MCP API only.
+    handle {
+        respond "Not Found" 404
+    }
+}

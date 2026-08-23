@@ -1,0 +1,28 @@
+name: mcp-seo-auditor
+
+services:
+  mcp-server:
+    build:
+      context: packages/mcp-server
+      target: development
+    ports:
+      - "8020:8020"
+    command: ["python", "-m", "seo_server.server", "--transport", "http"]
+    env_file:
+      - packages/mcp-server/.env
+    volumes:
+      - ./packages/mcp-server:/app
+      - ./packages/mcp-server/credentials:/app/credentials:ro
+    networks:
+      - dev-shared-net
+    labels:
+      dev.dozzle.group: "mcp-seo-auditor"
+
+# Shared dev infrastructure network, owned by the `dev-infra` compose project.
+# Never recreate it here. Joining it gives hostname access to the existing
+# infra-* containers (infra-postgres, infra-redis, infra-mailpit, ...) instead
+# of redeploying duplicates. This server persists to SQLite, so it needs none
+# of them today — the network is for reachability and Dozzle grouping.
+networks:
+  dev-shared-net:
+    external: true

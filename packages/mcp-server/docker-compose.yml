@@ -1,0 +1,35 @@
+services:
+  seo-auditor:
+    build:
+      context: .
+      target: development
+    container_name: seo-auditor-dev
+    ports:
+      - "8020:8020"
+    volumes:
+      # Mount source code for hot-reload
+      - .:/app
+      # Persist reports directory
+      - ./data:/app/data
+      # Google credentials (optional)
+      - ./credentials:/app/credentials:ro
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ALLOW_UNAUTHENTICATED_HTTP=true
+    command: ["python", "-m", "seo_server.server", "--transport", "http", "--host", "0.0.0.0", "--port", "8020"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8020/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+        reservations:
+          memory: 512M
+          cpus: "0.5"

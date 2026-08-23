@@ -1,0 +1,76 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+/lib/
+/lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Data & Reports
+data/
+
+# Credentials (never commit)
+credentials/
+*.credentials.json
+google-credentials.json
+client_secret_*.json
+
+# Environment
+.env
+.env.local
+.env.seo
+
+# Logs
+*.log
+logs/
+
+# spaCy models (downloaded at runtime, not app/models/)
+**/fr_core_news_*/
+**/en_core_web_*/
+
+# PID files
+.pids/
+
+# Claude Code local config
+.claude/settings.local.json
+
+# instant-grep index
+.ig/
+
+# Dashboard frontend
+apps/dashboard/node_modules/
+apps/dashboard/dist/
+apps/dashboard/.env
+RAPPORT_UPGRADE_SEO_GEO_MCP.html

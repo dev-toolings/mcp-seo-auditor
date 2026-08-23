@@ -1,0 +1,4 @@
+interface:
+  display_name: "MCP Local Setup"
+  short_description: "Install and verify the SEO Auditor MCP locally"
+  default_prompt: "Set up the MCP SEO Auditor locally in this repository and verify its stdio registry."

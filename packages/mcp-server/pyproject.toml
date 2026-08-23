@@ -1,0 +1,104 @@
+[project]
+name = "mcp-seo-auditor"
+version = "1.0.0"
+# Deliberately no tool/prompt count here: the previous "14 tools and 50 prompts"
+# had already drifted from the registered totals. The counts live in the code.
+description = "MCP server exposing SEO audit tools and prompts for Claude Code"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+keywords = ["mcp", "seo", "claude", "ai", "model-context-protocol", "audit"]
+
+dependencies = [
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "httpx>=0.26.0",
+    "lxml>=5.1.0",
+    "beautifulsoup4>=4.12.0",
+    "numpy>=1.24.0",
+    # Imported at module level by app/services/market/{keyword_research,niche_finder}.py.
+    # It used to arrive only transitively through keybert; now that keybert is an
+    # optional extra, the dependency has to be declared explicitly or those
+    # modules fail at import time.
+    "scikit-learn>=1.3.0",
+    "google-auth>=2.25.0",
+    "google-api-python-client>=2.111.0",
+    "tenacity>=8.0.0",
+    "tiktoken>=0.5.0",
+    "fastmcp[tasks]>=3.0.0",
+    # WARNING — pytrends is an UNOFFICIAL, reverse-engineered Google Trends
+    # client with no API contract: Google can break it without notice and
+    # upstream maintenance is sporadic. Five modules depend on it
+    # (app/services/market/{trend_analysis,competitor_analyzer,niche_finder,
+    # keyword_research,volume_calibrator}.py), which makes it this package's
+    # most likely breakage point. Keep those call sites behind try/except and
+    # be ready to swap in an official source (DataForSEO, Google Ads API).
+    "pytrends>=4.9.0",
+    "aiosqlite>=0.20.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+]
+# Optional NLP: spaCy is lazy-imported in app/services/keyword_extractor.py and
+# falls back to a frequency-based extractor when the model is unavailable.
+nlp = [
+    "spacy>=3.7.0",
+]
+# Optional market extras: keybert pulls sentence-transformers → torch (~2 GB).
+# Lazy-loaded in app/services/market/keyword_research.py; extraction returns []
+# when it is absent, so the base install stays lean.
+market = [
+    "keybert>=0.8.0",
+]
+llm = [
+    "anthropic>=0.39.0",
+    "openai>=1.50.0",
+]
+# Optional browser crawler (Chrome fallback in app/services/browser_crawler.py).
+# Also requires the `ghostchrome` binary in $PATH. The SDK is not on PyPI yet; until it
+# is published, install locally instead: pip install <ghostchrome-repo>/sdk/python
+browser = [
+    "ghostchrome @ git+https://github.com/dev-toolings/ghostchrome.git#subdirectory=sdk/python",
+]
+
+[project.urls]
+Repository = "https://github.com/dev-toolings/mcp-seo-auditor"
+
+[project.scripts]
+mcp-seo-auditor = "seo_server.server:main"
+
+[tool.setuptools.packages.find]
+include = ["seo_server*", "app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = "test_*.py"
+addopts = "-m 'not integration'"
+markers = [
+    "integration: tests making real external API calls (pytrends, GitHub, etc.)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+"seo_server/tools/*.py" = ["E501"]  # MCP tool descriptions are long by design
+"seo_server/prompts/*.py" = ["E501"]  # MCP prompt templates are long by design
+"seo_server/schemas/*.py" = ["E501"]  # MCP field descriptions are long by design
+"app/services/*.py" = ["E501"]  # Long SEO issue/recommendation strings
+"app/services/ai/*.py" = ["E501"]  # Long description strings in dicts
+"app/services/geo/*.py" = ["E501"]  # Long issue/recommendation strings
+"app/services/llm/*.py" = ["E501"]  # Long prompt strings
+"app/services/market/*.py" = ["E501"]  # Long issue/recommendation strings
+"app/services/reporting/*.py" = ["E501"]  # HTML/CSS template strings
+"app/repositories/*.py" = ["E501"]  # SQL DDL statements are long by design
+"tests/*.py" = ["E501"]  # Long sample query / fixture strings

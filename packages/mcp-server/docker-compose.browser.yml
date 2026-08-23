@@ -1,0 +1,11 @@
+# Override for browser rendering support
+# Usage: docker compose -f docker-compose.yml -f docker-compose.browser.yml up --build
+services:
+  seo-auditor:
+    build:
+      target: browser
+    shm_size: "2gb"
+    deploy:
+      resources:
+        limits:
+          memory: 4G

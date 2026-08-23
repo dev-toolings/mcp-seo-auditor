@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "seo-auditor": {
+      "command": "./packages/mcp-server/run_server.sh",
+      "args": []
+    }
+  }
+}

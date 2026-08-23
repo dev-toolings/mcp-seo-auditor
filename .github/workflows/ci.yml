@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/mcp-server
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: pip install ruff
+      - run: ruff check .
+      - run: ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/mcp-server
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      # The `market` extra (keybert → torch, ~2 GB) is deliberately not installed:
+      # it is lazy-loaded and only exercised by integration tests.
+      - run: pip install -e ".[dev,llm,nlp]"
+      - run: python -m spacy download fr_core_news_sm
+      - run: pytest tests/ -m "not integration" --tb=short -q --cov=seo_server --cov=app --cov-fail-under=50
+
+  typecheck:
+    runs-on: ubuntu-latest
+    # Blocking: `mypy seo_server app --ignore-missing-imports` is clean, so any
+    # new error is a regression introduced by the change under review.
+    defaults:
+      run:
+        working-directory: packages/mcp-server
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: pip install mypy
+      - run: mypy seo_server app --ignore-missing-imports --no-error-summary
