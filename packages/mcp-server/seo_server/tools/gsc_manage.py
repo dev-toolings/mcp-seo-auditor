@@ -22,7 +22,7 @@ Actions:
 - sites: Manage site properties (sub_action: list/add/delete/details/reauthenticate). Call with sub_action='list' first to get available properties. Use sub_action='reauthenticate' to reset OAuth token without restarting.
 - sitemaps: Manage sitemaps (sub_action: list/submit/details). Requires site_url.
 - inspect: Inspect URL indexing status. Pass page_url (single) or urls (batch, max 200). Use sub_action='quota' to check daily quota.
-- index: Get URLs (re)indexed (sub_action varies by provider). provider='google' (default) = Google Indexing API (notify/status, index_type URL_UPDATED/URL_DELETED) — only honoured for JobPosting/BroadcastEvent pages, requires the service account to be an Owner. provider='rapid' = Rapid URL Indexer, a pay-per-success third-party indexer that works for REGULAR pages (sub_action notify/submit to create a project from page_url/urls, status/report with project_id, credits for balance).""",
+- index: Google Indexing API (sub_action notify/status, index_type URL_UPDATED/URL_DELETED). Only honoured for JobPosting/BroadcastEvent pages and requires the service account to be an Owner. For regular pages, resubmit the sitemap (action='sitemaps', sub_action='submit') and check with action='inspect'.""",
 )
 @tool_handler
 async def gsc_manage(input: GscManageInput) -> dict:
@@ -53,8 +53,6 @@ async def gsc_manage(input: GscManageInput) -> dict:
             input.page_url,
             input.urls,
             input.index_type,
-            input.provider,
-            input.project_id,
         )
     else:
         return {"error": f"Unknown action: {action}. Use: sites, sitemaps, inspect, index"}
@@ -204,19 +202,13 @@ async def _manage_index(
     page_url: str | None,
     urls: list[str] | None,
     index_type: str,
-    provider: str = "google",
-    project_id: int | None = None,
 ) -> dict:
-    """Get URLs (re)indexed via the Google Indexing API or Rapid URL Indexer.
+    """Get URLs (re)indexed via the Google Indexing API.
 
-    provider='google' (default) uses urlNotifications:publish — officially
-    honoured only for JobPosting/BroadcastEvent pages, requires the service
-    account to be an Owner, daily quota 200 URLs. provider='rapid' uses the
-    Rapid URL Indexer pay-per-success API, which works for regular pages.
+    Uses urlNotifications:publish, officially honoured only for
+    JobPosting/BroadcastEvent pages. Requires the service account to be an
+    Owner; daily quota 200 URLs.
     """
-    if provider == "rapid":
-        return await _manage_index_rapid(sub_action, page_url, urls, project_id)
-
     sub_action = sub_action or "notify"
     gsc = svc.ctx.gsc
 
@@ -253,47 +245,3 @@ async def _manage_index(
         }
     else:
         return {"error": "Provide page_url (single) or urls (batch) for notify"}
-
-
-async def _manage_index_rapid(
-    sub_action: str | None,
-    page_url: str | None,
-    urls: list[str] | None,
-    project_id: int | None,
-) -> dict:
-    """Rapid URL Indexer — pay-per-success bulk indexer for regular pages.
-
-    sub_action: notify/submit (create a project from page_url/urls), status
-    (project state via project_id), report (per-URL, project_id), credits.
-    """
-    sub_action = sub_action or "notify"
-    indexer = svc.ctx.rapid_indexer
-
-    if not indexer.is_configured:
-        return {
-            "error": "RAPID_URL_INDEXER_API_KEY not configured. "
-            "See docs/INDEXING_API_SETUP.md (Rapid URL Indexer section)."
-        }
-
-    if sub_action == "credits":
-        return await indexer.get_credits()
-
-    if sub_action == "status":
-        if project_id is None:
-            return {"error": "project_id is required for status"}
-        return await indexer.get_status(project_id)
-
-    if sub_action == "report":
-        if project_id is None:
-            return {"error": "project_id is required for report"}
-        return await indexer.get_report(project_id)
-
-    if sub_action in ("notify", "submit"):
-        batch = list(urls or [])
-        if page_url:
-            batch.append(page_url)
-        if not batch:
-            return {"error": "Provide page_url (single) or urls (batch) to submit"}
-        return await indexer.submit(batch)
-
-    return {"error": f"Unknown sub_action: {sub_action}. Use: notify, status, report, credits"}

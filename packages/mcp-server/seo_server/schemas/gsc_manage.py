@@ -12,15 +12,7 @@ class GscManageInput(MCPInput):
     sub_action: str | None = None
     index_type: Literal["URL_UPDATED", "URL_DELETED"] = Field(
         default="URL_UPDATED",
-        description="Google Indexing API notification type for action='index' provider='google': URL_UPDATED (page created/changed) or URL_DELETED.",
-    )
-    provider: Literal["google", "rapid"] = Field(
-        default="google",
-        description="Indexing backend for action='index': 'google' (Indexing API — JobPosting/BroadcastEvent only) or 'rapid' (Rapid URL Indexer — pay-per-success bulk indexer that works for regular pages).",
-    )
-    project_id: int | None = Field(
-        default=None,
-        description="Rapid URL Indexer project id (provider='rapid', sub_action='status'/'report').",
+        description="Google Indexing API notification type for action='index': URL_UPDATED (page created/changed) or URL_DELETED.",
     )
     site_url: str | None = Field(
         default=None,

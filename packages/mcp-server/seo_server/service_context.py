@@ -28,7 +28,6 @@ _SIMPLE_SERVICES: dict[str, tuple[str, str]] = {
         "CannibalizationDetectorService",
     ),
     "gsc": ("app.services.google_search_console", "GoogleSearchConsoleService"),
-    "rapid_indexer": ("app.services.rapid_url_indexer", "RapidUrlIndexerService"),
     "structured_data_validator": (
         "app.services.structured_data_validator",
         "StructuredDataValidatorService",

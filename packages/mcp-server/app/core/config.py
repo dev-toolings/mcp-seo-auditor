@@ -121,11 +121,6 @@ class Settings(BaseSettings):
     DATAFORSEO_CACHE_TTL: int = 3600  # seconds; 0 disables the response cache
     DATAFORSEO_CACHE_MAX_ENTRIES: int = 512
 
-    # Rapid URL Indexer (optional — pay-per-success bulk Google indexer for
-    # regular pages, where the Google Indexing API does not apply)
-    RAPID_URL_INDEXER_API_KEY: SecretStr = SecretStr("")
-    RAPID_URL_INDEXER_BASE_URL: str = "https://rapidurlindexer.com/wp-json"
-
     model_config = SettingsConfigDict(
         env_file=os.environ.get("SEO_AUDITOR_ENV_FILE", ".env"),
         env_file_encoding="utf-8",
