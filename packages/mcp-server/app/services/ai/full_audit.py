@@ -292,11 +292,15 @@ class FullAuditService:
         # Content: from content audit
         scores["content"] = data.get("content", {}).get("score", 50)
 
-        # Links: from internal links
+        # Links: issue penalties averaged over the crawled pages, like content. A
+        # fixed penalty per issue floored any site with 10 broken links at 0, and
+        # the truncated issue lists (20 max) hid the rest. Counts are exact.
         links = data.get("internal_links", {})
-        orphan_penalty = len(links.get("orphan_pages", [])) * ORPHAN_PAGE_PENALTY
-        broken_penalty = len(links.get("broken_internal_links", [])) * BROKEN_LINK_PENALTY
-        scores["links"] = min(100, max(0, 100 - orphan_penalty - broken_penalty))
+        orphans = links.get("orphan_count", len(links.get("orphan_pages", [])))
+        broken = links.get("broken_count", len(links.get("broken_internal_links", [])))
+        penalty = orphans * ORPHAN_PAGE_PENALTY + broken * BROKEN_LINK_PENALTY
+        total_pages = max(links.get("total_pages", 0), 1)
+        scores["links"] = max(0, round(100 - penalty / total_pages))
 
         # Schema: from structured data
         sd = data.get("structured_data", {})

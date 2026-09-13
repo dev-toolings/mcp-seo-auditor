@@ -21,12 +21,16 @@ class InternalLinksAnalyzerService:
         self,
         pages: list[CrawledPage],
         sitemap_urls: list[str] | None = None,
+        target_statuses: dict[str, int] | None = None,
     ) -> dict[str, Any]:
         """Analyze internal link structure from crawled pages.
 
         Args:
             pages: List of crawled pages with internal_links populated.
             sitemap_urls: Optional list of sitemap URLs to detect orphan pages.
+            target_statuses: HTTP statuses of linked URLs outside ``pages``
+                (see ``uncrawled_targets``). Without them, a broken link can only
+                be detected when its target was itself crawled.
 
         Returns:
             Analysis report dict.
@@ -49,6 +53,9 @@ class InternalLinksAnalyzerService:
                 normalized = self._normalize_url(link)
                 graph[source_url].add(normalized)
                 all_linked_urls.add(normalized)
+
+        for url, status in (target_statuses or {}).items():
+            page_statuses.setdefault(self._normalize_url(url), status)
 
         # Compute PageRank
         pagerank = self._compute_pagerank(graph, crawled_urls | all_linked_urls)
@@ -127,6 +134,17 @@ class InternalLinksAnalyzerService:
             )
 
         return result
+
+    def uncrawled_targets(self, pages: list[CrawledPage]) -> list[str]:
+        """Internal link targets that no crawled page covers, so their status is unknown."""
+        visited = {self._normalize_url(page.url) for page in pages}
+        targets = {
+            self._normalize_url(link)
+            for page in pages
+            if page.status_code == 200
+            for link in page.internal_links
+        }
+        return sorted(targets - visited)
 
     def _compute_pagerank(self, graph: dict[str, set[str]], all_urls: set[str]) -> dict[str, float]:
         """Compute PageRank using iterative algorithm."""

@@ -135,7 +135,9 @@ async def _site_links(input: SeoSiteInput) -> dict:
     urls = [u.loc for u in sitemap_data.urls[:max_pages]]
     pages = await svc.ctx.crawler.crawl_pages(urls)
     sitemap_urls = [u.loc for u in sitemap_data.urls]
-    return svc.ctx.internal_links_analyzer.analyze(pages, sitemap_urls=sitemap_urls)
+    analyzer = svc.ctx.internal_links_analyzer
+    target_statuses = await svc.ctx.crawler.check_link_statuses(analyzer.uncrawled_targets(pages))
+    return analyzer.analyze(pages, sitemap_urls=sitemap_urls, target_statuses=target_statuses)
 
 
 async def _site_cannibalization(input: SeoSiteInput) -> dict:

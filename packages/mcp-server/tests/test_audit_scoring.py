@@ -52,3 +52,16 @@ def test_full_audit_scores_skip_unavailable_cwv_and_geo():
         "schema": 100,
     }
     assert service._calculate_overall_score(scores) == 100
+
+
+def test_links_score_scales_with_site_size():
+    """16 broken links on a 159-page site cost 1 point, not the whole dimension."""
+    service = FullAuditService(orchestrator=None, geo_analyzer=None, ai_analyzer=None)
+
+    def links_score(internal_links: dict) -> int:
+        return service._calculate_dimension_scores({"internal_links": internal_links})["links"]
+
+    # Counts win over the lists, which the analyzer truncates to 20 entries.
+    assert links_score({"total_pages": 159, "broken_count": 16, "orphan_count": 0}) == 99
+    assert links_score({"total_pages": 2, "broken_count": 20, "orphan_count": 1}) == 0
+    assert links_score({"broken_internal_links": [{}], "orphan_pages": []}) == 90

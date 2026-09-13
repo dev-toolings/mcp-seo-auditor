@@ -96,13 +96,16 @@ class Settings(BaseSettings):
     )
     CHROME_DEVTOOLS_CPU_THROTTLE: int | None = None  # 1-20
 
-    # Browser Rendering (agent-browser)
+    # Browser Rendering. BROWSER_BACKEND: auto (ghostchrome if found, else
+    # agent-browser), ghostchrome, or agent-browser.
+    BROWSER_BACKEND: str = "auto"
     BROWSER_HEADLESS: bool = True
     BROWSER_TIMEOUT: int = 60
     BROWSER_IDLE_TIMEOUT: int = 300
     BROWSER_MAX_CONCURRENT: int = 3
     BROWSER_CDP: str = ""
     BROWSER_AGENT_PATH: str = "agent-browser"
+    GHOSTCHROME_PATH: str = "ghostchrome"
 
     # DataForSEO (optional — keyword volumes, SERP data, keyword suggestions)
     # Billed per request: the resilience knobs below cap spend and protect the

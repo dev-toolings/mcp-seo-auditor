@@ -49,7 +49,7 @@ async def _analyze_content(input: SeoAnalyzeInput) -> dict:
     check_empty_listings = input.check_empty_listings
     logger.info("MCP: seo_analyze/content (%s) for %d URLs", depth, len(urls))
 
-    from app.services.content_validator import ContentValidatorService
+    from app.services.content_validator import ContentValidatorService, content_score
     from app.services.crawler_service import CrawlerService
 
     if input.listing_config:
@@ -69,6 +69,7 @@ async def _analyze_content(input: SeoAnalyzeInput) -> dict:
     listing_url_patterns = input.listing_config.url_patterns if input.listing_config else []
     validator = ContentValidatorService(listing_url_patterns=listing_url_patterns)
     all_issues = []
+    issues_by_page = []
     page_results = []
 
     for page in pages:
@@ -78,6 +79,7 @@ async def _analyze_content(input: SeoAnalyzeInput) -> dict:
             check_empty_listings=check_empty_listings,
         )
         all_issues.extend(issues)
+        issues_by_page.append(issues)
         page_result = {
             "url": page.url,
             "status": page.status_code,
@@ -93,12 +95,8 @@ async def _analyze_content(input: SeoAnalyzeInput) -> dict:
 
         page_results.append(page_result)
 
-    critical_count = sum(1 for i in all_issues if i.severity == "critical")
-    warning_count = sum(1 for i in all_issues if i.severity == "warning")
-    score = max(0, 100 - (critical_count * 10) - (warning_count * 3))
-
     return {
-        "score": score,
+        "score": content_score(issues_by_page),
         "depth": depth,
         "pages_analyzed": len(pages),
         "pages_with_issues": sum(1 for p in page_results if p["issues"]),

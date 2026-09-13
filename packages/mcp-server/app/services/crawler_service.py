@@ -1,4 +1,4 @@
-"""Async crawler service using ghostchrome for all pages."""
+"""Async crawler service using a browser backend (ghostchrome or agent-browser) for all pages."""
 
 import asyncio
 import json
@@ -21,6 +21,48 @@ logger = logging.getLogger(__name__)
 # Share of the rendered text that exists only after JS before a page is flagged
 # as JS-dependent in the raw-vs-rendered diff.
 _JS_CONTENT_GAP_THRESHOLD = 0.3
+
+# Link targets outside the crawl get a plain status check, capped per analysis.
+_MAX_LINK_STATUS_CHECKS = 500
+_BOT_BLOCK_STATUSES = {401, 403, 429}
+
+_BROWSER_INSTALL_HINTS = {
+    "ghostchrome": "https://github.com/dev-toolings/ghostchrome",
+    "agent-browser": "bun add -g agent-browser && agent-browser install",
+}
+
+
+def _resolve_browser_backend(requested: str) -> str:
+    """Pick the crawler backend from BROWSER_BACKEND (auto, ghostchrome, agent-browser).
+
+    ``auto`` keeps ghostchrome first, the historical default, and falls back to
+    agent-browser, so a host with either binary can crawl.
+    """
+    from app.services import agent_browser_crawler, browser_crawler
+
+    available = {
+        "ghostchrome": browser_crawler.GHOSTCHROME_AVAILABLE,
+        "agent-browser": agent_browser_crawler.AGENT_BROWSER_AVAILABLE,
+    }
+    choice = (requested or "auto").strip().lower()
+    if choice == "auto":
+        for name, is_available in available.items():
+            if is_available:
+                return name
+        raise RuntimeError(
+            "A browser is required but none was found. Install ghostchrome "
+            f"({_BROWSER_INSTALL_HINTS['ghostchrome']}) or agent-browser "
+            f"({_BROWSER_INSTALL_HINTS['agent-browser']})."
+        )
+    if choice not in available:
+        raise RuntimeError(
+            f"Unknown BROWSER_BACKEND {requested!r}: use auto, ghostchrome or agent-browser."
+        )
+    if not available[choice]:
+        raise RuntimeError(
+            f"{choice} is required but not found. Install: {_BROWSER_INSTALL_HINTS[choice]}"
+        )
+    return choice
 
 
 def _schema_types(structured_data: list[dict]) -> set[str]:
@@ -193,6 +235,39 @@ class CrawlerService:
 
         return pages
 
+    async def check_link_statuses(
+        self, urls: list[str], limit: int = _MAX_LINK_STATUS_CHECKS
+    ) -> dict[str, int]:
+        """HTTP status of link targets the crawl did not visit (plain GET, redirects followed).
+
+        Returns 0 for a target that could not be checked: a network failure, or
+        401/403/429, which on an otherwise crawlable site means bot protection
+        rather than a missing page. The links analyzer never counts 0 as broken.
+        """
+        if len(urls) > limit:
+            logger.warning("Checking %d of %d uncrawled link targets", limit, len(urls))
+            urls = urls[:limit]
+        semaphore = asyncio.Semaphore(self.max_concurrent)
+        statuses: dict[str, int] = {}
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+
+            async def check(url: str) -> None:
+                async with semaphore:
+                    try:
+                        response = await safe_get(
+                            client, url, headers={"User-Agent": self.user_agent}
+                        )
+                    except Exception as e:
+                        logger.debug("Link target check failed for %s: %s", url, e)
+                        statuses[url] = 0
+                        return
+                    status = response.status_code
+                    statuses[url] = 0 if status in _BOT_BLOCK_STATUSES else status
+
+            await asyncio.gather(*(check(url) for url in urls))
+        return statuses
+
     async def fetch_raw_html(self, url: str) -> tuple[str, int, str]:
         """Fetch the server HTML with a plain HTTP GET — no JS execution.
 
@@ -347,23 +422,32 @@ class CrawlerService:
         }
 
     async def _get_browser_crawler(self):
-        """Lazy-init BrowserCrawler. Raises RuntimeError if ghostchrome is absent."""
+        """Lazy-init the BROWSER_BACKEND crawler. Raises RuntimeError if none is usable."""
         if self._browser_crawler is None:
-            from app.services.browser_crawler import GHOSTCHROME_AVAILABLE, BrowserCrawler
+            backend = _resolve_browser_backend(settings.BROWSER_BACKEND)
+            if backend == "agent-browser":
+                from app.services.agent_browser_crawler import AgentBrowserCrawler
 
-            if not GHOSTCHROME_AVAILABLE:
-                raise RuntimeError(
-                    "ghostchrome is required but not found. "
-                    "Install from: https://github.com/dev-toolings/ghostchrome"
+                self._browser_crawler = AgentBrowserCrawler(
+                    headless=settings.BROWSER_HEADLESS,
+                    timeout=settings.BROWSER_TIMEOUT,
+                    idle_timeout=settings.BROWSER_IDLE_TIMEOUT,
+                    max_concurrent=settings.BROWSER_MAX_CONCURRENT,
+                    cdp_url=settings.BROWSER_CDP,
+                    agent_browser_path=settings.BROWSER_AGENT_PATH,
                 )
-            self._browser_crawler = BrowserCrawler(
-                headless=settings.BROWSER_HEADLESS,
-                timeout=settings.BROWSER_TIMEOUT,
-                idle_timeout=settings.BROWSER_IDLE_TIMEOUT,
-                max_concurrent=settings.BROWSER_MAX_CONCURRENT,
-                cdp_url=settings.BROWSER_CDP,
-                agent_browser_path=settings.BROWSER_AGENT_PATH,
-            )
+            else:
+                from app.services.browser_crawler import BrowserCrawler
+
+                self._browser_crawler = BrowserCrawler(
+                    headless=settings.BROWSER_HEADLESS,
+                    timeout=settings.BROWSER_TIMEOUT,
+                    idle_timeout=settings.BROWSER_IDLE_TIMEOUT,
+                    max_concurrent=settings.BROWSER_MAX_CONCURRENT,
+                    cdp_url=settings.BROWSER_CDP,
+                    ghostchrome_path=settings.GHOSTCHROME_PATH,
+                )
+            logger.info("Browser crawler backend: %s", backend)
         return self._browser_crawler
 
     async def close(self):

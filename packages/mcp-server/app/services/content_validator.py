@@ -17,6 +17,27 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def content_score(issues_by_page: list[list[Issue]]) -> int:
+    """Content score for a set of pages: the mean of each page's own score.
+
+    A page loses 10 points per critical issue and 3 per warning. Summing those
+    penalties across the whole crawl made the score depend on site size: 34
+    warnings spread over any number of pages already floored it at 0.
+    """
+    if not issues_by_page:
+        return 100
+    page_scores = [
+        max(
+            0,
+            100
+            - 10 * sum(1 for i in issues if i.severity == "critical")
+            - 3 * sum(1 for i in issues if i.severity == "warning"),
+        )
+        for issues in issues_by_page
+    ]
+    return round(sum(page_scores) / len(page_scores))
+
+
 class ContentValidatorService:
     """Validate page content for SEO issues."""
 

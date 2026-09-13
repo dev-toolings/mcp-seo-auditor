@@ -63,17 +63,19 @@ class AuditOrchestrator:
 
     async def audit_content(self, urls: list[str], pages=None, **kwargs) -> dict:
         """Content quality audit — equivalent to seo_analyze/content action."""
-        from app.services.content_validator import ContentValidatorService
+        from app.services.content_validator import ContentValidatorService, content_score
 
         if pages is None:
             pages = await self._ctx.crawler.crawl_pages(urls)
         validator = ContentValidatorService()
         all_issues = []
+        issues_by_page = []
         page_results = []
 
         for page in pages:
             issues = validator.validate(page)
             all_issues.extend(issues)
+            issues_by_page.append(issues)
             page_results.append(
                 {
                     "url": page.url,
@@ -86,12 +88,8 @@ class AuditOrchestrator:
                 }
             )
 
-        critical_count = sum(1 for i in all_issues if i.severity == "critical")
-        warning_count = sum(1 for i in all_issues if i.severity == "warning")
-        score = max(0, 100 - (critical_count * 10) - (warning_count * 3))
-
         return {
-            "score": score,
+            "score": content_score(issues_by_page),
             "pages_analyzed": len(pages),
             "pages_with_issues": sum(1 for p in page_results if p["issues"]),
             "pages": page_results,
@@ -125,7 +123,11 @@ class AuditOrchestrator:
         elif sitemap_urls is None:
             sitemap_data = await self._ctx.sitemap_parser.fetch_and_parse(sitemap_url)
             sitemap_urls = [u.loc for u in sitemap_data.urls]
-        return self._ctx.internal_links_analyzer.analyze(pages, sitemap_urls=sitemap_urls)
+        analyzer = self._ctx.internal_links_analyzer
+        target_statuses = await self._ctx.crawler.check_link_statuses(
+            analyzer.uncrawled_targets(pages)
+        )
+        return analyzer.analyze(pages, sitemap_urls=sitemap_urls, target_statuses=target_statuses)
 
     async def technical_check(
         self,

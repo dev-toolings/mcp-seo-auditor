@@ -20,13 +20,16 @@ class TestGhostchromeAvailability:
         assert isinstance(GHOSTCHROME_AVAILABLE, bool)
 
     async def test_raises_without_ghostchrome(self):
-        """RuntimeError is raised when ghostchrome is absent."""
+        """RuntimeError is raised when ghostchrome and agent-browser are both absent."""
         from app.services.crawler_service import CrawlerService
 
         crawler = CrawlerService()
 
-        with patch("app.services.browser_crawler.GHOSTCHROME_AVAILABLE", False):
-            with pytest.raises(RuntimeError, match="ghostchrome is required"):
+        with (
+            patch("app.services.browser_crawler.GHOSTCHROME_AVAILABLE", False),
+            patch("app.services.agent_browser_crawler.AGENT_BROWSER_AVAILABLE", False),
+        ):
+            with pytest.raises(RuntimeError, match="none was found"):
                 await crawler._get_browser_crawler()
 
 

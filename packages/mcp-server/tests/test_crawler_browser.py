@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.core.config import settings
 from app.services.crawler_service import CrawledPage, CrawlerService
 
 # ---------------------------------------------------------------------------
@@ -173,14 +174,17 @@ class TestCrawlPagesErrorHandling:
 
 
 class TestGhostchromeUnavailable:
-    """Verify RuntimeError when ghostchrome is not installed."""
+    """Verify RuntimeError when no browser backend is installed."""
 
     async def test_raises_runtime_error(self):
-        """crawl_pages raises RuntimeError when GHOSTCHROME_AVAILABLE is False."""
+        """crawl_pages raises RuntimeError when neither ghostchrome nor agent-browser exists."""
         crawler = _make_crawler()
 
-        with patch("app.services.browser_crawler.GHOSTCHROME_AVAILABLE", False):
-            with pytest.raises(RuntimeError, match="ghostchrome is required"):
+        with (
+            patch("app.services.browser_crawler.GHOSTCHROME_AVAILABLE", False),
+            patch("app.services.agent_browser_crawler.AGENT_BROWSER_AVAILABLE", False),
+        ):
+            with pytest.raises(RuntimeError, match="none was found"):
                 await crawler.crawl_pages(["https://example.com"])
 
 
@@ -213,11 +217,14 @@ class TestGetBrowserCrawler:
         assert result is mock_instance
 
     async def test_raises_when_agent_browser_absent(self):
-        """_get_browser_crawler raises RuntimeError when ghostchrome missing."""
+        """_get_browser_crawler raises RuntimeError when no browser binary is found."""
         crawler = _make_crawler()
 
-        with patch("app.services.browser_crawler.GHOSTCHROME_AVAILABLE", False):
-            with pytest.raises(RuntimeError, match="ghostchrome is required"):
+        with (
+            patch("app.services.browser_crawler.GHOSTCHROME_AVAILABLE", False),
+            patch("app.services.agent_browser_crawler.AGENT_BROWSER_AVAILABLE", False),
+        ):
+            with pytest.raises(RuntimeError, match="none was found"):
                 await crawler._get_browser_crawler()
 
 
@@ -254,3 +261,58 @@ class TestCrawlerServiceClose:
         await crawler.close()
 
         assert crawler._browser_crawler is None
+
+
+# ---------------------------------------------------------------------------
+# BROWSER_BACKEND: ghostchrome or agent-browser
+# ---------------------------------------------------------------------------
+
+
+class TestBrowserBackendSelection:
+    """BROWSER_BACKEND picks the crawler; auto prefers ghostchrome."""
+
+    async def test_auto_prefers_ghostchrome(self):
+        """auto uses ghostchrome when both binaries exist."""
+        from app.services.browser_crawler import BrowserCrawler
+
+        crawler = _make_crawler()
+        with (
+            patch("app.services.browser_crawler.GHOSTCHROME_AVAILABLE", True),
+            patch("app.services.agent_browser_crawler.AGENT_BROWSER_AVAILABLE", True),
+            patch.object(settings, "BROWSER_BACKEND", "auto"),
+        ):
+            result = await crawler._get_browser_crawler()
+
+        assert isinstance(result, BrowserCrawler)
+
+    async def test_auto_falls_back_to_agent_browser(self):
+        """auto uses agent-browser when ghostchrome is missing."""
+        from app.services.agent_browser_crawler import AgentBrowserCrawler
+
+        crawler = _make_crawler()
+        with (
+            patch("app.services.browser_crawler.GHOSTCHROME_AVAILABLE", False),
+            patch("app.services.agent_browser_crawler.AGENT_BROWSER_AVAILABLE", True),
+            patch.object(settings, "BROWSER_BACKEND", "auto"),
+        ):
+            result = await crawler._get_browser_crawler()
+
+        assert isinstance(result, AgentBrowserCrawler)
+
+    async def test_explicit_backend_missing_raises(self):
+        """An explicitly requested backend that is not installed is an error, not a fallback."""
+        crawler = _make_crawler()
+        with (
+            patch("app.services.browser_crawler.GHOSTCHROME_AVAILABLE", True),
+            patch("app.services.agent_browser_crawler.AGENT_BROWSER_AVAILABLE", False),
+            patch.object(settings, "BROWSER_BACKEND", "agent-browser"),
+        ):
+            with pytest.raises(RuntimeError, match="agent-browser is required"):
+                await crawler._get_browser_crawler()
+
+    async def test_unknown_backend_raises(self):
+        """A typo in BROWSER_BACKEND is reported with the accepted values."""
+        crawler = _make_crawler()
+        with patch.object(settings, "BROWSER_BACKEND", "playwright"):
+            with pytest.raises(RuntimeError, match="Unknown BROWSER_BACKEND"):
+                await crawler._get_browser_crawler()

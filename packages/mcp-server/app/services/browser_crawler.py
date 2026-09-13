@@ -16,6 +16,8 @@ from typing import Optional
 
 from bs4 import BeautifulSoup
 
+from app.core.config import settings
+
 try:
     from ghostchrome import Ghostchrome
 except ImportError:  # SDK is optional — the fastfetch HTTP path works without it
@@ -49,7 +51,7 @@ def _find_ghostchrome(configured_path: Optional[str] = None) -> Optional[str]:
     return None
 
 
-GHOSTCHROME_PATH = _find_ghostchrome()
+GHOSTCHROME_PATH = _find_ghostchrome(settings.GHOSTCHROME_PATH)
 GHOSTCHROME_AVAILABLE = GHOSTCHROME_PATH is not None
 GHOSTCHROME_SDK_AVAILABLE = Ghostchrome is not None
 
@@ -69,14 +71,14 @@ class BrowserCrawler:
         max_concurrent: int = 3,
         cdp_url: str = "",
         user_agent: str = DEFAULT_USER_AGENT,
-        agent_browser_path: Optional[str] = None,
+        ghostchrome_path: Optional[str] = None,
     ):
         self.headless = headless
         self.timeout = timeout
         self.max_concurrent = max_concurrent
         self.cdp_url = cdp_url
         self.user_agent = user_agent
-        self._gc_path = _find_ghostchrome(agent_browser_path) or _DEFAULT_GHOSTCHROME
+        self._gc_path = _find_ghostchrome(ghostchrome_path) or _DEFAULT_GHOSTCHROME
         self._semaphore = asyncio.Semaphore(max_concurrent)
 
     async def _run_cmd(self, *args: str, timeout: Optional[int] = None) -> bytes:

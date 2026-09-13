@@ -110,7 +110,13 @@ prompt or a tool schema.
 - Config via `.env` and `app/core/config.py` (Pydantic BaseSettings)
 - GSC requires credentials in `credentials/google-credentials.json`
 - LLM provider: `LLM_PROVIDER=anthropic|openai|ollama` (auto-detection)
-- Browser crawler (`app/services/browser_crawler.py`) needs two **optional** runtime deps:
+- Browser backend is chosen by `BROWSER_BACKEND=auto|ghostchrome|agent-browser` (`auto`:
+  ghostchrome if found, else agent-browser). The agent-browser crawler
+  (`app/services/agent_browser_crawler.py`) needs only the `agent-browser` CLI plus its
+  Chromium (`agent-browser install`): `read --raw` fast path, then a named `--session`
+  (`open` + `eval`, status from the network log), closed in `close()`. It strips secrets
+  from the subprocess env and adds `--no-sandbox` under root, Docker or AppArmor userns.
+- Ghostchrome crawler (`app/services/browser_crawler.py`) needs two **optional** runtime deps:
   the `ghostchrome` binary in `$PATH` (CLI `fastfetch` fast path) and the `ghostchrome`
   Python SDK (Chrome fallback via `navigate`+`eval`). Both are absent in CI — the tests
   mock the crawler, so they are not required to run the suite. Install the SDK from the
