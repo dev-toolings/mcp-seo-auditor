@@ -83,12 +83,20 @@ FROM production AS browser
 USER root
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates unzip nodejs && \
+    curl ca-certificates unzip nodejs \
+    libxcb-shm0 libx11-xcb1 libx11-6 libxcb1 libxext6 libxrandr2 \
+    libxcomposite1 libxcursor1 libxdamage1 libxfixes3 libxi6 \
+    libgtk-3-0t64 libpangocairo-1.0-0 libpango-1.0-0 libatk1.0-0t64 \
+    libcairo-gobject2 libcairo2 libgdk-pixbuf-2.0-0 libxrender1 \
+    libasound2t64 libfreetype6 libfontconfig1 libdbus-1-3 libnss3 \
+    libnss3-tools libnspr4 libatk-bridge2.0-0t64 libdrm2 libxkbcommon0 \
+    libatspi2.0-0t64 libcups2t64 libxshmfence1 libgbm1 \
+    fonts-noto-color-emoji fonts-noto-cjk fonts-freefont-ttf && \
     export BUN_INSTALL="/opt/bun" && \
     curl -fsSL https://bun.sh/install | bash && \
     chmod -R 755 /opt/bun && \
     /opt/bun/bin/bun install -g agent-browser && \
-    /opt/bun/bin/agent-browser install --with-deps && \
+    /opt/bun/bin/agent-browser install && \
     rm -rf /var/lib/apt/lists/*
 
 ENV PATH="/opt/bun/bin:$PATH"
