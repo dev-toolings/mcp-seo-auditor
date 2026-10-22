@@ -5,6 +5,8 @@
 # Stage 1: Base Image with system dependencies
 # ═══════════════════════════════════════════════════════════════
 FROM python:3.11-slim AS base
+# pip >= 26.2.2 ships certifi 2026.10.19 (eMudhra CA compromise, CVE-2026-113470).
+RUN python -m pip install --no-cache-dir --upgrade "pip>=26.2.2"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
