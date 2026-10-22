@@ -13,6 +13,8 @@ dependencies = [
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
     "httpx>=0.26.0",
+    # certifi 2026.10.19 drops the compromised emSign ECC Root CA - G3 (CVE-2026-113470).
+    "certifi>=2026.10.19",
     "lxml>=5.1.0",
     "beautifulsoup4>=4.12.0",
     "numpy>=1.24.0",
